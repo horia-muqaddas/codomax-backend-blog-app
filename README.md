@@ -15,3 +15,8 @@ A Node.js and Express RESTful API backend for the Codomax Blog Application.
 ## 🧪 API Testing Results
 * **Status:** Tested & Working Successfully
 * **Response Format:** JSON
+## 🚀 CRUD Endpoints Added (Module 5)
+- `GET /api/blogs` - Read all blogs
+- `POST /api/blogs` - Create a blog
+- `PUT /api/blogs/:id` - Update a blog
+- `DELETE /api/blogs/:id` - Delete a blog
