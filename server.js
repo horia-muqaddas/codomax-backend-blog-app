@@ -1,88 +1,100 @@
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// In-Memory Data Store for Blogs
-let blogs = [
+const JWT_SECRET = "mysecretkey123";
+
+// In-Memory Databases
+let users = [];
+let blogs =[
     {
         _id: "1",
-        title: "First Welcome Blog",
-        content: "Welcome to Codomax Blog API!",
-        category: "Tech",
-        createdAt: new Date()
+        title: "Welcome to My Blog",
+        content: "Yeh mera pehla blog post hai!",
+        author: "Horia"
     },
     {
         _id: "2",
-        title: "Learning Express JS",
-        content: "Express makes Node.js backend development super easy.",
-        category: "Coding",
-        createdAt: new Date()
+        title: "Learning Express & JWT",
+        content: "Backend development seekhna bohot interesting hai.",
+        author: "Horia"
     }
 ];
 
-// 1. READ ALL (GET)
+// --- MIDDLEWARE TO PROTECT ROUTES ---
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return res.status(401).json({ error: "Access Denied. Token Missing!" });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: "Invalid or Expired Token!" });
+        req.user = user;
+        next();
+    });
+};
+
+// --- AUTH ROUTES ---
+
+// 1. REGISTER USER
+app.post('/api/register', async (req, res) => {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) {
+        return res.status(400).json({ error: "All fields are required" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = { id: (users.length + 1).toString(), username, email, password: hashedPassword };
+    users.push(newUser);
+
+    res.status(201).json({ message: "User registered successfully!" });
+});
+
+// 2. LOGIN USER (Generates JWT)
+app.post('/api/login', async (req, res) => {
+    const { email, password } = req.body;
+    const user = users.find(u => u.email === email);
+
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+        return res.status(400).json({ error: "Invalid Email or Password" });
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+
+    res.status(200).json({ message: "Login successful!", token, user: { id: user.id, username: user.username, email: user.email } });
+});
+
+// 3. GET USER PROFILE (Protected)
+app.get('/api/profile', authenticateToken, (req, res) => {
+    res.status(200).json({ message: "Profile fetched successfully", user: req.user });
+});
+
+// --- BLOG ROUTES ---
+
+// Public Route: Read Blogs
 app.get('/api/blogs', (req, res) => {
     res.status(200).json(blogs);
 });
 
-// 2. READ SINGLE BLOG BY ID (GET)
-app.get('/api/blogs/:id', (req, res) => {
-    const blog = blogs.find(b => b._id === req.params.id);
-    if (!blog) return res.status(404).json({ error: "Blog not found" });
-    res.status(200).json(blog);
-});
-
-// 3. CREATE BLOG (POST)
-app.post('/api/blogs', (req, res) => {
-    const { title, content, category } = req.body;
-    if (!title || !content) {
-        return res.status(400).json({ error: "Title and Content are required" });
-    }
+// Protected Route: Create Blog
+app.post('/api/blogs', authenticateToken, (req, res) => {
+    const { title, content } = req.body;
     const newBlog = {
         _id: (blogs.length + 1).toString(),
         title,
         content,
-        category: category || "General",
+        author: req.user.username,
+        userId: req.user.id,
         createdAt: new Date()
     };
     blogs.push(newBlog);
     res.status(201).json({ message: "Blog created successfully!", blog: newBlog });
 });
 
-// 4. UPDATE BLOG (PUT)
-app.put('/api/blogs/:id', (req, res) => {
-    const { id } = req.params;
-    const { title, content, category } = req.body;
-
-    const blogIndex = blogs.findIndex(b => b._id === id);
-    if (blogIndex === -1) {
-        return res.status(404).json({ error: "Blog not found" });
-    }
-
-    blogs[blogIndex] = {
-        ...blogs[blogIndex],
-        title: title || blogs[blogIndex].title,
-        content: content || blogs[blogIndex].content,
-        category: category || blogs[blogIndex].category
-    };
-
-    res.status(200).json({ message: "Blog updated successfully!", blog: blogs[blogIndex] });
-});
-
-// 5. DELETE BLOG (DELETE)
-app.delete('/api/blogs/:id', (req, res) => {
-    const { id } = req.params;
-    const blogIndex = blogs.findIndex(b => b._id === id);
-
-    if (blogIndex === -1) {
-        return res.status(404).json({ error: "Blog not found" });
-    }
-
-    const deletedBlog = blogs.splice(blogIndex, 1);
-    res.status(200).json({ message: "Blog deleted successfully!", blog: deletedBlog[0] });
-});
-
-app.listen(5000, () => console.log('🚀 Server running on port 5000 with Full CRUD Support'));
+app.listen(5000, () => console.log('🚀 Server running on port 5000 with JWT Authentication'));
